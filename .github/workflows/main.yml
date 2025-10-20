@@ -1,0 +1,52 @@
+# Nome do nosso robô
+name: Bdkards Data Scraper
+
+# O "Despertador"
+on:
+  # Permite que você rode o robô manualmente pelo site do GitHub
+  workflow_dispatch:
+  
+  # Agenda a execução automática
+  schedule:
+    # Roda a cada 12 horas (às 8h e 20h do horário de Natal)
+    - cron: '0 11,23 * * *'
+
+# A "Lista de Tarefas" do robô
+jobs:
+  build:
+    # O robô vai rodar em uma máquina com Linux (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      # Tarefa 1: Baixar o seu código do repositório
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Tarefa 2: Preparar o ambiente Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Tarefa 3: Instalar as ferramentas da "lista de compras"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Tarefa 4: Instalar o Google Chrome (necessário para o Selenium)
+      - name: Install Google Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      # Tarefa 5: Executar o seu script principal!
+      - name: Run Scraper
+        run: python cbf_scraper.py
+
+      # Tarefa 6 (O Pulo do Gato): Salvar o banco de dados de volta no GitHub
+      - name: Commit and push database
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Data update: Auto-commit brasileirao.db"
+          file_pattern: 'database/brasileirao.db'
