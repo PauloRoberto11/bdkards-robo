@@ -14,6 +14,8 @@ on:
 # A "Lista de Tarefas" do robô
 jobs:
   build:
+    permissions:
+      contents: write
     # O robô vai rodar em uma máquina com Linux (Ubuntu)
     runs-on: ubuntu-latest
 
