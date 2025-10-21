@@ -1,4 +1,4 @@
-# Nome do nosso robô, que aparecerá no GitHub
+# Nome do nosso robô, que aparecerá na aba "Actions" do GitHub
 name: Bdkards Data Scraper
 
 # O "Despertador" que aciona o robô
@@ -8,13 +8,13 @@ on:
   
   # Agenda a execução automática
   schedule:
-    # Roda a cada 12 horas (às 8h e 20h do horário de Natal/UTC-3)
+    # Roda a cada 12 horas (aproximadamente às 8h e 20h do seu fuso horário, UTC-3)
     - cron: '0 11,23 * * *'
 
 # A "Lista de Tarefas" do robô
 jobs:
   build:
-    # A PERMISSÃO CRUCIAL que permite ao robô salvar o arquivo de volta
+    # A PERMISSÃO CRUCIAL que permite ao robô salvar o arquivo de volta no repositório
     permissions:
       contents: write
 
@@ -51,7 +51,11 @@ jobs:
 
       # Passo 6 (O Pulo do Gato): Salvar o banco de dados gerado de volta no GitHub
       - name: Commit and push database
+        # Esta ação automatiza os comandos git para salvar o arquivo
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          # A mensagem que aparecerá no histórico do seu projeto
           commit_message: "Data update: Auto-commit brasileirao.db"
+          
+          # O arquivo exato que ele deve procurar e salvar
           file_pattern: 'database/brasileirao.db'
