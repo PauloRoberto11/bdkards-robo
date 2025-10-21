@@ -5,7 +5,7 @@ import time
 import sqlite3
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
@@ -194,9 +194,9 @@ def buscar_classificacao_com_scraping(ano_competicao, estatisticas_jogadores, ti
         print(f"   > Erro ao fazer web scraping da tabela de classificação: {e}")
         return {}
 
-def buscar_stats_365scores():
-    print("\nBuscando dados de estatísticas via Web Scraping do 365Scores (com Selenium)...")
-    stats_365 = {}
+def buscar_escanteios_365scores():
+    print("\nBuscando dados de escanteios via Web Scraping do 365Scores (com Selenium)...")
+    stats_escanteios = {}
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
@@ -238,34 +238,30 @@ def buscar_stats_365scores():
 
         soup = BeautifulSoup(driver.page_source, 'lxml')
         
-        titulos = {"Escanteios por jogo": "media_escanteios", "Cartões Amarelos": "total_amarelos", "Cartões Vermelhos": "total_vermelhos"}
-        for titulo_texto, stat_key in titulos.items():
-            titulo_tag = soup.find('h2', string=titulo_texto)
-            if not titulo_tag:
-                print(f"   > AVISO: Tabela '{titulo_texto}' não encontrada.")
-                continue
+        titulo_tag = soup.find('h2', string='Escanteios por jogo')
+        if not titulo_tag:
+            print("   > AVISO: Tabela 'Escanteios por jogo' não encontrada.")
+            return {}
 
-            container_geral = titulo_tag.find_parent('div', class_=lambda c: c and c.startswith('entity-stats-widget_content'))
-            if not container_geral:
-                print(f"   > AVISO: Container geral para '{titulo_texto}' não encontrado.")
-                continue
+        container_geral = titulo_tag.find_parent('div', class_=lambda c: c and c.startswith('entity-stats-widget_content'))
+        if not container_geral:
+            print("   > AVISO: Container geral para 'Escanteios por jogo' não encontrado.")
+            return {}
 
-            linhas = container_geral.find_all('a', class_=lambda c: c and c.startswith('entity-stats-widget_row'))
-            for linha in linhas:
-                nome_tag = linha.find('span', class_=lambda c: c and c.startswith('entity-stats-widget_player_name'))
-                valor_tag = linha.find('div', class_=lambda c: c and c.startswith('entity-stats-widget_stats_value'))
-                if nome_tag and valor_tag:
-                    nome_time = nome_tag.text.strip()
-                    if nome_time not in stats_365:
-                        stats_365[nome_time] = {}
-                    try:
-                        valor = float(valor_tag.text.strip())
-                        stats_365[nome_time][stat_key] = valor
-                    except ValueError:
-                        continue
+        linhas = container_geral.find_all('a', class_=lambda c: c and c.startswith('entity-stats-widget_row'))
+        for linha in linhas:
+            nome_tag = linha.find('span', class_=lambda c: c and c.startswith('entity-stats-widget_player_name'))
+            valor_tag = linha.find('div', class_=lambda c: c and c.startswith('entity-stats-widget_stats_value'))
+            if nome_tag and valor_tag:
+                nome_time = nome_tag.text.strip()
+                try:
+                    media_escanteios = float(valor_tag.text.strip())
+                    stats_escanteios[nome_time] = media_escanteios
+                except ValueError:
+                    continue
         
-        print(f"✅ Dados de estatísticas para {len(stats_365)} times coletados com sucesso do 365Scores.")
-        return stats_365
+        print(f"✅ Dados de escanteios para {len(stats_escanteios)} times coletados com sucesso do 365Scores.")
+        return stats_escanteios
         
     except Exception as e:
         print(f"   > Erro ao fazer web scraping do 365Scores com Selenium: {e}")
@@ -285,58 +281,34 @@ def main_run():
     
     if len(dados_times_cbf) < 20:
         print(f"❌ ERRO DE VALIDAÇÃO: A API da CBF retornou apenas {len(dados_times_cbf)} times. Abortando ciclo.")
-        return False
+        sys.exit(1)
 
     estatisticas_dos_times = buscar_classificacao_com_scraping(ANO_COMPETICAO, dados_jogadores, dados_times_cbf)
     
     if len(estatisticas_dos_times) < 20:
         print(f"❌ ERRO DE VALIDAÇÃO: O scraping da CBF retornou apenas {len(estatisticas_dos_times)} times. Abortando ciclo.")
-        return False
+        sys.exit(1)
     
-    stats_365 = buscar_stats_365scores()
+    stats_escanteios_365 = buscar_escanteios_365scores()
 
-    if len(stats_365) < 20:
-        print(f"❌ ERRO DE VALIDAÇÃO: O scraping do 365Scores retornou apenas {len(stats_365)} times. Abortando ciclo.")
-        return False
+    if len(stats_escanteios_365) < 20:
+        print(f"❌ ERRO DE VALIDAÇÃO: O scraping do 365Scores retornou apenas {len(stats_escanteios_365)} times. Abortando ciclo.")
+        sys.exit(1)
 
-    if estatisticas_dos_times and stats_365:
+    if estatisticas_dos_times and stats_escanteios_365:
         nome_para_id_cbf = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
-        for nome_365, stats in stats_365.items():
+        for nome_365, media in stats_escanteios_365.items():
             nome_cbf = MAPA_NOMES_EXTERNOS_PARA_CBF.get(nome_365, nome_365)
             time_id = nome_para_id_cbf.get(nome_cbf)
-            
             if time_id and time_id in estatisticas_dos_times:
-                jogos_disputados = estatisticas_dos_times[time_id].get('jogos_disputados', 0)
-                
-                total_amarelos = stats.get('total_amarelos', 0)
-                if jogos_disputados > 0:
-                    media = float(total_amarelos) / jogos_disputados
-                    estatisticas_dos_times[time_id]['media_amarelos'] = round(media, 2)
-                else:
-                    estatisticas_dos_times[time_id]['media_amarelos'] = 0
-                
-                estatisticas_dos_times[time_id]['total_vermelhos'] = stats.get('total_vermelhos', 0)
-                estatisticas_dos_times[time_id]['media_escanteios'] = stats.get('media_escanteios', 0)
+                estatisticas_dos_times[time_id]['media_escanteios'] = media
             else:
                 print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
 
     salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times)
-    return True
+    print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO.")
 
-# --- FLUXO PRINCIPAL (O CORAÇÃO DO ROBÔ) ---
+# --- FLUXO PRINCIPAL (SIMPLIFICADO PARA O SERVIDOR) ---
 if __name__ == "__main__":
     criar_banco_de_dados()
-    
-    while True: # Laço infinito
-        sucesso = main_run()
-
-        if sucesso:
-            proxima_execucao = datetime.now() + timedelta(hours=12)
-            print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO. Hibernando por 12 horas.")
-            print(f"Próxima execução agendada para: {proxima_execucao.strftime('%d/%m/%Y %H:%M:%S')}")
-            time.sleep(12 * 60 * 60)
-        else:
-            proxima_tentativa = datetime.now() + timedelta(minutes=30)
-            print(f"\n❌ CICLO FALHOU. Tentando novamente em 30 minutos.")
-            print(f"Próxima tentativa agendada para: {proxima_tentativa.strftime('%d/%m/%Y %H:%M:%S')}")
-            time.sleep(30 * 60)
+    main_run()
