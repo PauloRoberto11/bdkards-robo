@@ -4,16 +4,17 @@ import json
 import time
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService # Renomeado para evitar conflito
-from webdriver_manager.chrome import ChromeDriverManager # <-- LINHA ADICIONADA
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # --- CONFIGURAÇÕES GLOBAIS ---
-DB_FOLDER_PATH = r'C:\dev\database'
+# O caminho do DB é relativo para funcionar em qualquer servidor
+DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database')
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
 ANO_COMPETICAO = 2025
@@ -152,7 +153,7 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
     url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
     estatisticas_times = {}
     try:
-        response = requests.get(url_tabela, headers=HEADERS)
+        response = requests.get(url_tabela, headers=HEADERS, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'lxml')
         container_tabela = soup.find('div', class_='styles_tableContent__dh0gO')
@@ -189,15 +190,15 @@ def buscar_stats_365scores():
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument(f"user-agent={HEADERS['User-Agent']}")
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
     service = ChromeService(ChromeDriverManager().install())
-
     driver = None
     try:
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
         print("   > Clicando na aba 'Times'...")
-        times_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'secondary-tabs_tab_button') and text()='Times']")))
+        times_button = WebDriverWait(driver, 30).until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'secondary-tabs_tab_button') and text()='Times']")))
         driver.execute_script("arguments[0].click();", times_button)
         print("   > Aguardando tabelas carregarem...")
         time.sleep(3)
@@ -251,7 +252,7 @@ def buscar_stats_365scores():
 # --- FUNÇÃO PRINCIPAL DE EXECUÇÃO ---
 def main_run():
     """Executa um ciclo completo de coleta, validação e salvamento dos dados."""
-    print(f"\n{'='*20} INICIANDO NOVO CICLO DE COLETA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} {'='*20}")
+    print(f"\n{'='*20} INICIANDO CICLO DE COLETA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} {'='*20}")
     
     limpar_tabelas()
     
@@ -301,11 +302,16 @@ def main_run():
 if __name__ == "__main__":
     criar_banco_de_dados()
     
-    sucesso = main_run() # Executa o ciclo de coleta uma vez e termina
+    while True: # Laço infinito
+        sucesso = main_run()
 
-    if sucesso:
-        print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO NO SERVIDOR.")
-    else:
-        print(f"\n❌ CICLO FALHOU NO SERVIDOR.")
-    
-    
+        if sucesso:
+            proxima_execucao = datetime.now() + timedelta(hours=12)
+            print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO. Hibernando por 12 horas.")
+            print(f"Próxima execução agendada para: {proxima_execucao.strftime('%d/%m/%Y %H:%M:%S')}")
+            time.sleep(12 * 60 * 60)
+        else:
+            proxima_tentativa = datetime.now() + timedelta(minutes=30)
+            print(f"\n❌ CICLO FALHOU. Tentando novamente em 30 minutos.")
+            print(f"Próxima tentativa agendada para: {proxima_tentativa.strftime('%d/%m/%Y %H:%M:%S')}")
+            time.sleep(30 * 60)
