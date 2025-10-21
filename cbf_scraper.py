@@ -17,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database') # Caminho relativo para funcionar em qualquer servidor
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
-ANO_COMPETICAO = 2024 # USANDO 2024 PARA GARANTIR DADOS COMPLETOS E ESTÁVEIS
+ANO_COMPETICAO = 2025 # USANDO 2024 PARA GARANTIR DADOS COMPLETOS E ESTÁVEIS
 TOTAL_RODADAS = 38
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
