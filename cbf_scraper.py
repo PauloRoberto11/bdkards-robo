@@ -17,19 +17,32 @@ from selenium.webdriver.support import expected_conditions as EC
 DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database')
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
-ANO_COMPETICAO = 2024 # Usando 2024 para garantir dados completos e estáveis
+ANO_COMPETICAO = 2025 # Usando 2024 para garantir dados completos e estáveis
 TOTAL_RODADAS = 38
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 # MAPEAMENTO CRUCIAL E CORRIGIDO (O SEU MAPA):
 MAPA_NOMES_EXTERNOS_PARA_CBF = {
-    "Atlético-MG": "Atlético Mineiro Saf", "RB Bragantino": "Red Bull Bragantino",
-    "São Paulo": "São Paulo", "Flamengo": "Flamengo", "Corinthians": "Corinthians",
-    "Vasco da Gama": "Vasco da Gama S.a.f.", "Vasco": "Vasco da Gama S.a.f.",
-    "Bahia": "Bahia", "Vitória": "Vitória", "Fortaleza": "Fortaleza Ec Saf",
-    "Ceará": "Ceará", "Mirassol": "Mirassol", "Sport Recife": "Sport", "Juventude": "Juventude",
-    "Grêmio": "Grêmio", "Palmeiras": "Palmeiras", "Fluminense": "Fluminense",
-    "Santos": "Santos Fc", "Botafogo": "Botafogo", "Internacional": "Internacional",
+    "Atlético-MG": "Atlético Mineiro Saf",
+    "RB Bragantino": "Red Bull Bragantino",
+    "São Paulo": "São Paulo",
+    "Flamengo": "Flamengo",
+    "Corinthians": "Corinthians",
+    "Vasco da Gama": "Vasco da Gama S.a.f.",
+    "Vasco": "Vasco da Gama S.a.f.",
+    "Bahia": "Bahia",
+    "Vitória": "Vitória",
+    "Fortaleza": "Fortaleza Ec Saf",
+    "Ceará": "Ceará",
+    "Mirassol": "Mirassol",
+    "Sport Recife": "Sport",
+    "Juventude": "Juventude",
+    "Grêmio": "Grêmio",
+    "Palmeiras": "Palmeiras",
+    "Fluminense": "Fluminense",
+    "Santos": "Santos Fc",
+    "Botafogo": "Botafogo",
+    "Internacional": "Internacional",
     "Cruzeiro": "Cruzeiro Saf",
 }
 
@@ -135,7 +148,7 @@ def buscar_dados_campeonato_completo(id_competicao, num_rodadas):
             continue
     return estatisticas_jogadores, times_info, jogos_finalizados_info, todas_as_partidas_info
 
-def buscar_classificacao_com_scraping(ano_competicao, times_info):
+def buscar_classificacao_com_scraping(ano_competicao, estatisticas_jogadores, times_info):
     print("\nBuscando dados de classificação via Web Scraping da CBF...")
     url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
     estatisticas_times = {}
@@ -150,6 +163,13 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
         linhas = tabela.find('tbody').find_all('tr')
         
         mapa_api_normalizado = {info['nome'].lower().replace(' saf', '').replace('s.a.f.', '').replace(' ec', '').replace(' cr', '').strip(): time_id for time_id, info in times_info.items()}
+        
+        cartoes_por_time = {}
+        for atleta in estatisticas_jogadores.values():
+            time_id = atleta['time_id']
+            if time_id not in cartoes_por_time: cartoes_por_time[time_id] = {'amarelos': 0, 'vermelhos': 0}
+            cartoes_por_time[time_id]['amarelos'] += atleta['amarelos']
+            cartoes_por_time[time_id]['vermelhos'] += atleta['vermelhos']
             
         for linha in linhas:
             celulas = linha.find_all('td')
@@ -165,7 +185,9 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
             time_id = mapa_api_normalizado.get(nome_site_normalizado)
             
             if time_id:
-                estatisticas_times[time_id] = {'posicao': int(posicao), 'pontos': int(pontos), 'ultimos_jogos': ultimos_jogos_str, 'jogos_disputados': jogos_disputados}
+                total_amarelos = cartoes_por_time.get(time_id, {}).get('amarelos', 0)
+                media_amarelos = (total_amarelos / jogos_disputados) if jogos_disputados > 0 else 0
+                estatisticas_times[time_id] = {'posicao': int(posicao), 'pontos': int(pontos), 'ultimos_jogos': ultimos_jogos_str, 'jogos_disputados': jogos_disputados, 'media_amarelos': round(media_amarelos, 2), 'total_vermelhos': cartoes_por_time.get(time_id, {}).get('vermelhos', 0)}
         print(f"✅ Dados de classificação para {len(estatisticas_times)} times processados com sucesso.")
         return estatisticas_times
     except Exception as e:
@@ -174,19 +196,18 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
 
 def buscar_stats_365scores():
     print("\nBuscando dados de estatísticas via Web Scraping do 365Scores (com Selenium)...")
-    url = "https://www.365scores.com/pt-br/football/league/brasileirao-serie-a-113/stats"
     stats_365 = {}
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
+    
     service = ChromeService(ChromeDriverManager().install())
     driver = None
     try:
         driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
+        driver.get("https://www.365scores.com/pt-br/football/league/brasileirao-serie-a-113/stats")
         print("   > Clicando na aba 'Times'...")
         times_button = WebDriverWait(driver, 60).until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'secondary-tabs_tab_button') and text()='Times']")))
         driver.execute_script("arguments[0].click();", times_button)
@@ -264,45 +285,58 @@ def main_run():
     
     if len(dados_times_cbf) < 20:
         print(f"❌ ERRO DE VALIDAÇÃO: A API da CBF retornou apenas {len(dados_times_cbf)} times. Abortando ciclo.")
-        sys.exit(1)
+        return False
 
-    estatisticas_dos_times = buscar_classificacao_com_scraping(ANO_COMPETICAO, dados_times_cbf)
+    estatisticas_dos_times = buscar_classificacao_com_scraping(ANO_COMPETICAO, dados_jogadores, dados_times_cbf)
     
     if len(estatisticas_dos_times) < 20:
         print(f"❌ ERRO DE VALIDAÇÃO: O scraping da CBF retornou apenas {len(estatisticas_dos_times)} times. Abortando ciclo.")
-        sys.exit(1)
+        return False
     
     stats_365 = buscar_stats_365scores()
 
     if len(stats_365) < 20:
         print(f"❌ ERRO DE VALIDAÇÃO: O scraping do 365Scores retornou apenas {len(stats_365)} times. Abortando ciclo.")
-        sys.exit(1)
+        return False
 
-    # Combina os dados de estatísticas
-    nome_para_id_cbf = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
-    for nome_365, stats in stats_365.items():
-        nome_cbf = MAPA_NOMES_EXTERNOS_PARA_CBF.get(nome_365, nome_365)
-        time_id = nome_para_id_cbf.get(nome_cbf)
-        
-        if time_id and time_id in estatisticas_dos_times:
-            jogos_disputados = estatisticas_dos_times[time_id].get('jogos_disputados', 0)
+    if estatisticas_dos_times and stats_365:
+        nome_para_id_cbf = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
+        for nome_365, stats in stats_365.items():
+            nome_cbf = MAPA_NOMES_EXTERNOS_PARA_CBF.get(nome_365, nome_365)
+            time_id = nome_para_id_cbf.get(nome_cbf)
             
-            total_amarelos = stats.get('total_amarelos', 0)
-            if jogos_disputados > 0:
-                media = float(total_amarelos) / jogos_disputados
-                estatisticas_dos_times[time_id]['media_amarelos'] = round(media, 2)
+            if time_id and time_id in estatisticas_dos_times:
+                jogos_disputados = estatisticas_dos_times[time_id].get('jogos_disputados', 0)
+                
+                total_amarelos = stats.get('total_amarelos', 0)
+                if jogos_disputados > 0:
+                    media = float(total_amarelos) / jogos_disputados
+                    estatisticas_dos_times[time_id]['media_amarelos'] = round(media, 2)
+                else:
+                    estatisticas_dos_times[time_id]['media_amarelos'] = 0
+                
+                estatisticas_dos_times[time_id]['total_vermelhos'] = stats.get('total_vermelhos', 0)
+                estatisticas_dos_times[time_id]['media_escanteios'] = stats.get('media_escanteios', 0)
             else:
-                estatisticas_dos_times[time_id]['media_amarelos'] = 0
-            
-            estatisticas_dos_times[time_id]['total_vermelhos'] = stats.get('total_vermelhos', 0)
-            estatisticas_dos_times[time_id]['media_escanteios'] = stats.get('media_escanteios', 0)
-        else:
-            print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
+                print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
 
     salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times)
-    print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO.")
+    return True
 
-# --- FLUXO PRINCIPAL (SIMPLIFICADO PARA O SERVIDOR) ---
+# --- FLUXO PRINCIPAL (O CORAÇÃO DO ROBÔ) ---
 if __name__ == "__main__":
     criar_banco_de_dados()
-    main_run()
+    
+    while True: # Laço infinito
+        sucesso = main_run()
+
+        if sucesso:
+            proxima_execucao = datetime.now() + timedelta(hours=12)
+            print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO. Hibernando por 12 horas.")
+            print(f"Próxima execução agendada para: {proxima_execucao.strftime('%d/%m/%Y %H:%M:%S')}")
+            time.sleep(12 * 60 * 60)
+        else:
+            proxima_tentativa = datetime.now() + timedelta(minutes=30)
+            print(f"\n❌ CICLO FALHOU. Tentando novamente em 30 minutos.")
+            print(f"Próxima tentativa agendada para: {proxima_tentativa.strftime('%d/%m/%Y %H:%M:%S')}")
+            time.sleep(30 * 60)
