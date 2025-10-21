@@ -203,8 +203,7 @@ def buscar_stats_365scores():
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
+    
     service = ChromeService(ChromeDriverManager().install())
     driver = None
     try:
@@ -220,8 +219,8 @@ def buscar_stats_365scores():
             ver_mais_buttons = driver.find_elements(By.XPATH, "//div[contains(text(), 'Ver mais')]")
             for button in ver_mais_buttons:
                 driver.execute_script("arguments[0].click();", button)
-            print("   > Todas as listas expandidas. Aguardando 3 segundos...")
-            time.sleep(3)
+            print("   > Todas as listas expandidas. Aguardando 5 segundos...")
+            time.sleep(5)
         except:
             print("   > AVISO: Nenhum botão 'Ver mais' encontrado. Continuando...")
         soup = BeautifulSoup(driver.page_source, 'lxml')
