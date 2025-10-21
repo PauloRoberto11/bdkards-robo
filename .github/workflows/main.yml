@@ -1,52 +1,55 @@
-# Nome do nosso robô
+# Nome do nosso robô, que aparecerá no GitHub
 name: Bdkards Data Scraper
 
-# O "Despertador"
+# O "Despertador" que aciona o robô
 on:
-  # Permite que você rode o robô manualmente pelo site do GitHub
+  # Permite que você rode o robô manualmente pelo site do GitHub (para testes)
   workflow_dispatch:
   
   # Agenda a execução automática
   schedule:
-    # Roda a cada 12 horas (às 8h e 20h do horário de Natal)
+    # Roda a cada 12 horas (às 8h e 20h do horário de Natal/UTC-3)
     - cron: '0 11,23 * * *'
 
 # A "Lista de Tarefas" do robô
 jobs:
   build:
+    # A PERMISSÃO CRUCIAL que permite ao robô salvar o arquivo de volta
     permissions:
       contents: write
-    # O robô vai rodar em uma máquina com Linux (Ubuntu)
+
+    # O robô vai rodar em uma máquina virtual com Linux (Ubuntu)
     runs-on: ubuntu-latest
 
+    # A sequência de passos que o robô irá executar
     steps:
-      # Tarefa 1: Baixar o seu código do repositório
+      # Passo 1: Baixar a versão mais recente do seu código
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Tarefa 2: Preparar o ambiente Python
+      # Passo 2: Preparar o ambiente Python na versão 3.10
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # Tarefa 3: Instalar as ferramentas da "lista de compras"
+      # Passo 3: Instalar as ferramentas da "lista de compras" (requirements.txt)
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Tarefa 4: Instalar o Google Chrome (necessário para o Selenium)
+      # Passo 4: Instalar o navegador Google Chrome (necessário para o Selenium no servidor)
       - name: Install Google Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      # Tarefa 5: Executar o seu script principal!
+      # Passo 5: Executar o seu script principal!
       - name: Run Scraper
         run: python cbf_scraper.py
 
-      # Tarefa 6 (O Pulo do Gato): Salvar o banco de dados de volta no GitHub
+      # Passo 6 (O Pulo do Gato): Salvar o banco de dados gerado de volta no GitHub
       - name: Commit and push database
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
