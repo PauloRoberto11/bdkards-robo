@@ -15,7 +15,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # --- CONFIGURAÇÕES GLOBAIS ---
-DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database')
+# O caminho agora aponta para a pasta 'database' dentro do seu projeto Flutter no diretório pai
+DB_FOLDER_PATH = os.path.join(os.getcwd(), '..', 'bdkards', 'database') 
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
 ANO_COMPETICAO = 2025
@@ -54,6 +55,8 @@ def criar_banco_de_dados():
             media_cartoes_amarelos REAL, total_cartoes_vermelhos INTEGER, media_escanteios REAL,
             FOREIGN KEY (time_id) REFERENCES times (id)
         )''')
+    # DROP para garantir que a nova estrutura com colunas de imagem e posição seja criada
+    cursor.execute('DROP TABLE IF EXISTS escalacoes')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS escalacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +66,9 @@ def criar_banco_de_dados():
             numero_camisa TEXT,
             posicao TEXT,
             is_titular INTEGER,
+            foto_url TEXT,
+            pos_x REAL,
+            pos_y REAL,
             FOREIGN KEY (jogo_id) REFERENCES partidas (id_jogo)
         )''')
     conn.commit()
@@ -70,6 +76,8 @@ def criar_banco_de_dados():
     print(f"Banco de dados verificado/criado em: {DB_FILE}")
 
 def limpar_tabelas():
+    # Esta função se torna redundante, pois criar_banco_de_dados já limpa a tabela principal,
+    # mas a mantemos para clareza do fluxo.
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     print("Recriando tabelas (DROP/CREATE)...")
@@ -115,8 +123,8 @@ def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_
             if 'mandante' in escalacao_jogo:
                 time_mandante = escalacao_jogo['mandante']
                 for jogador in time_mandante.get('titulares', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 1, 'Titular'))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
                 for jogador in time_mandante.get('reservas', []):
                     cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
                                    (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao']))
@@ -127,8 +135,8 @@ def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_
             if 'visitante' in escalacao_jogo:
                 time_visitante = escalacao_jogo['visitante']
                 for jogador in time_visitante.get('titulares', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 1, 'Titular'))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
                 for jogador in time_visitante.get('reservas', []):
                     cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
                                    (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao']))
@@ -258,14 +266,36 @@ def extrair_dados_time(widget_content):
     except AttributeError:
         print("     - Aviso: Formação não encontrada.")
         
-    titulares = widget_content.find_all('a', class_=lambda c: c and 'field-formation_player_container' in c)
-    for j in titulares:
-        dados['titulares'].append({
-            'nome': j.find('div', class_=lambda c: c and 'field-formation_player_name' in c).text.strip(),
-            'numero': j.find('div', class_=lambda c: c and 'field-formation_player_number' in c).text.strip()
-        })
+    canvas_container = widget_content.find('div', class_=lambda c: c and 'field-formation_canvas_relative_container' in c)
+    if canvas_container:
+        container_style = canvas_container.get('style', '')
+        width_match = re.search(r'width:\s*([\d.]+)px', container_style)
+        height_match = re.search(r'height:\s*([\d.]+)px', container_style)
+        
+        container_width = float(width_match.group(1)) if width_match and width_match.group(1) else 1.0
+        container_height = float(height_match.group(1)) if height_match and height_match.group(1) else 1.0
+        
+        if container_width == 0: container_width = 1.0
+        if container_height == 0: container_height = 1.0
+
+        titulares_tags = canvas_container.find_all('a', class_=lambda c: c and 'field-formation_player_container' in c)
+        for j_tag in titulares_tags:
+            style = j_tag.get('style', '')
+            left_match = re.search(r'left:\s*([\d.-]+)px', style)
+            bottom_match = re.search(r'bottom:\s*([\d.-]+)px', style)
+            
+            pos_x_px = float(left_match.group(1)) if left_match else 0.0
+            pos_y_px = float(bottom_match.group(1)) if bottom_match else 0.0
+
+            dados['titulares'].append({
+                'nome': j_tag.find('div', class_=lambda c: c and 'field-formation_player_name' in c).text.strip(),
+                'numero': j_tag.find('div', class_=lambda c: c and 'field-formation_player_number_text' in c).text.strip(),
+                'foto_url': j_tag.find('img').get('src', ''),
+                'pos_x': (pos_x_px / container_width) * 100,
+                'pos_y': (pos_y_px / container_height) * 100,
+            })
     print(f"     - {len(dados['titulares'])} titulares encontrados.")
-    
+
     listas_jogadores = widget_content.find_all('div', class_=lambda c: c and 'players-list-container' in c)
     for lista in listas_jogadores:
         titulo_tag = lista.find(['h2', 'h3'], class_=lambda c: c and 'card-title_title' in c)
@@ -302,7 +332,8 @@ def buscar_stats_365scores():
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-    
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1920,1280')
     service = ChromeService(ChromeDriverManager().install())
     driver = None
     stats_365 = {}
@@ -374,7 +405,7 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-   
+    options.add_argument('--disable-dev-shm-usage')
     
     service = ChromeService(ChromeDriverManager().install())
     driver = None
@@ -388,10 +419,9 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
         driver.get(url_fixtures)
         handle_cookie_banner(driver)
         
-        # LÓGICA DO "PAPIRO INTELIGENTE" (DO DIAGNÓSTICO)
         print("   > Desenrolando o papiro de jogos para carregar todas as rodadas...")
         last_height = 0
-        max_scrolls = 15
+        max_scrolls = 15 
         for i in range(max_scrolls):
             driver.execute_script("window.scrollBy(0, window.innerHeight);")
             time.sleep(2)
@@ -486,8 +516,6 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
             driver.quit()
             print("   > Navegador de escalações fechado.")
 
-
-# --- FUNÇÃO PRINCIPAL DE EXECUÇÃO ---
 def main_run():
     print(f"\n{'='*20} INICIANDO CICLO DE COLETA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} {'='*20}")
     
@@ -503,22 +531,27 @@ def main_run():
     if len(estatisticas_dos_times) < 20: sys.exit(f"❌ ERRO: Scraping da CBF retornou apenas {len(estatisticas_dos_times)} times.")
     
     stats_365 = buscar_stats_365scores()
-    if len(stats_365) < 20: sys.exit(f"❌ ERRO: Scraping de estatísticas retornou apenas {len(stats_365)} times.")
-    
+    if stats_365 and len(stats_365) < 20: 
+        print(f"⚠️ AVISO: Scraping de estatísticas retornou apenas {len(stats_365)} times. Continuando mesmo assim.")
+
     rodada_atual = max([jogo['rodada'] for jogo in jogos_finalizados]) if jogos_finalizados else 0
     proxima_rodada = rodada_atual + 1
-    jogos_da_proxima_rodada_cbf = [jogo for jogo in todas_as_partidas if jogo['rodada'] == proxima_rodada]
-    mapa_nomes_cbf_para_365 = {v: k for k, v in MAPA_NOMES_365_PARA_CBF.items()}
-    todas_as_escalacoes = buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365)
     
-    for jogo_id, escalacao_data in todas_as_escalacoes.items():
-        for i, partida in enumerate(todas_as_partidas):
-            if partida['id_jogo'] == jogo_id:
-                if 'mandante' in escalacao_data and 'formacao' in escalacao_data['mandante']:
-                    todas_as_partidas[i]['mandante_formacao'] = escalacao_data['mandante']['formacao']
-                if 'visitante' in escalacao_data and 'formacao' in escalacao_data['visitante']:
-                    todas_as_partidas[i]['visitante_formacao'] = escalacao_data['visitante']['formacao']
-                break
+    if proxima_rodada > TOTAL_RODADAS:
+        print("Campeonato finalizado. Nenhuma nova escalação para buscar.")
+    else:
+        jogos_da_proxima_rodada_cbf = [jogo for jogo in todas_as_partidas if jogo['rodada'] == proxima_rodada]
+        mapa_nomes_cbf_para_365 = {v: k for k, v in MAPA_NOMES_365_PARA_CBF.items()}
+        todas_as_escalacoes = buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365)
+        
+        for jogo_id, escalacao_data in todas_as_escalacoes.items():
+            for i, partida in enumerate(todas_as_partidas):
+                if partida['id_jogo'] == jogo_id:
+                    if 'mandante' in escalacao_data and 'formacao' in escalacao_data['mandante']:
+                        todas_as_partidas[i]['mandante_formacao'] = escalacao_data['mandante']['formacao']
+                    if 'visitante' in escalacao_data and 'formacao' in escalacao_data['visitante']:
+                        todas_as_partidas[i]['visitante_formacao'] = escalacao_data['visitante']['formacao']
+                    break
 
     if estatisticas_dos_times and stats_365:
         nome_para_id_cbf = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
@@ -535,7 +568,7 @@ def main_run():
             else:
                 print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
 
-    salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times, todas_as_escalacoes)
+    salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times, todas_as_escalacoes if 'todas_as_escalacoes' in locals() else {})
     print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO.")
 
 if __name__ == "__main__":
