@@ -16,7 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # --- CONFIGURAÇÕES GLOBAIS ---
 # O caminho agora aponta para a pasta 'database' dentro do seu projeto Flutter no diretório pai
-DB_FOLDER_PATH = os.path.join(os.getcwd(), '..', 'bdkards', 'database') 
+DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database') 
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
 ANO_COMPETICAO = 2025
@@ -332,8 +332,7 @@ def buscar_stats_365scores():
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1280')
+    
     service = ChromeService(ChromeDriverManager().install())
     driver = None
     stats_365 = {}
@@ -405,7 +404,7 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
+    
     
     service = ChromeService(ChromeDriverManager().install())
     driver = None
