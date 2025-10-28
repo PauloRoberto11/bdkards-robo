@@ -13,10 +13,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from unidecode import unidecode
 
 # --- CONFIGURAÇÕES GLOBAIS ---
-# O caminho agora aponta para a pasta 'database' dentro do seu projeto Flutter no diretório pai
-DB_FOLDER_PATH = os.path.join(os.getcwd(), 'database') 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FOLDER_PATH = os.path.join(SCRIPT_DIR, 'database')
 DB_FILE = os.path.join(DB_FOLDER_PATH, 'brasileirao.db')
 ID_COMPETICAO_CBF = 12606
 ANO_COMPETICAO = 2025
@@ -24,23 +25,63 @@ TOTAL_RODADAS = 38
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 MAPA_NOMES_365_PARA_CBF = {
-    "Atlético-MG": "Atlético Mineiro Saf", "RB Bragantino": "Red Bull Bragantino",
-    "São Paulo": "São Paulo", "Flamengo": "Flamengo", "Corinthians": "Corinthians",
-    "Vasco da Gama": "Vasco da Gama S.a.f.", "Vasco": "Vasco da Gama S.a.f.",
-    "Bahia": "Bahia", "Vitória": "Vitória", "Fortaleza": "Fortaleza Ec Saf",
-    "Ceará": "Ceará", "Mirassol": "Mirassol", "Sport Recife": "Sport", "Juventude": "Juventude",
-    "Grêmio": "Grêmio", "Palmeiras": "Palmeiras", "Fluminense": "Fluminense",
-    "Santos": "Santos Fc", "Botafogo": "Botafogo", "Internacional": "Internacional",
+    "Atlético-MG": "Atlético Mineiro Saf", 
+    "Bahia": "Bahia",
+    "Botafogo": "Botafogo", 
+    "Ceará": "Ceará",
+    "Corinthians": "Corinthians",
     "Cruzeiro": "Cruzeiro Saf",
-    "Athletico-PR": "Athletico Paranaense", "Atlético-GO": "Atlético Goianiense Saf",
-    "Criciúma": "Criciúma", "Cuiabá": "Cuiabá Saf"
+    "Flamengo": "Flamengo",
+    "Fluminense": "Fluminense",
+    "Fortaleza": "Fortaleza Ec Saf",
+    "Grêmio": "Grêmio",
+    "Internacional": "Internacional",
+    "Juventude": "Juventude",
+    "Mirassol": "Mirassol",
+    "Palmeiras": "Palmeiras",
+    "RB Bragantino": "Red Bull Bragantino",
+    "Santos": "Santos Fc",
+    "São Paulo": "São Paulo",  
+    "Vasco da Gama": "Vasco da Gama S.a.f.",
+    "Sport Recife": "Sport",
+    "Vitória": "Vitória", 
+      
 }
+URLS_ELENCO_365 = {
+     "Atlético-MG": "https://www.365scores.com/pt-br/football/team/atletico-mineiro-1209/squad",
+     "Bahia": "https://www.365scores.com/pt-br/football/team/bahia-1767/squad",
+     "Botafogo": "https://www.365scores.com/pt-br/football/team/botafogo-1211/squad",
+     "Ceara": "https://www.365scores.com/pt-br/football/team/ceara-1781/squad",
+     "Corinthians": "https://www.365scores.com/pt-br/football/team/corinthians-1267/squad",
+     "Cruzeiro": "https://www.365scores.com/pt-br/football/team/cruzeiro-1213/squad",
+     "Flamengo": "https://www.365scores.com/pt-br/football/team/flamengo-1215/squad",
+     "Fluminense": "https://www.365scores.com/pt-br/football/team/fluminense-1216/squad",
+     "Fortaleza": "https://www.365scores.com/pt-br/football/team/fortaleza-1778/squad",
+     "Grêmio": "https://www.365scores.com/pt-br/football/team/gremio-1218/squad",
+     "Internacional": "https://www.365scores.com/pt-br/football/team/sc-internacional-1219/squad",
+     "Juventude": "https://www.365scores.com/pt-br/football/team/juventude-1775/squad",
+     "Mirassol": "https://www.365scores.com/pt-br/football/team/mirassol-1269/squad",
+     "Palmeiras": "https://www.365scores.com/pt-br/football/team/palmeiras-1222/squad",
+     "RB Bragantino": "https://www.365scores.com/pt-br/football/team/red-bull-bragantino-1273/squad",
+     "Santos": "https://www.365scores.com/pt-br/football/team/santos-1224/squad",
+     "São Paulo": "https://www.365scores.com/pt-br/football/team/sao-paulo-1225/squad",
+     "Sport Recife": "https://www.365scores.com/pt-br/football/team/sport-recife-1226/squad",
+     "Vasco": "https://www.365scores.com/pt-br/football/team/vasco-da-gama-1227/squad",
+     "Vitória": "https://www.365scores.com/pt-br/football/team/vitoria-1228/squad"
+ }
 
 # --- FUNÇÕES DO BANCO DE DADOS ---
 def criar_banco_de_dados():
     os.makedirs(DB_FOLDER_PATH, exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS escalacoes")
+    cursor.execute("DROP TABLE IF EXISTS atletas")
+    cursor.execute("DROP TABLE IF EXISTS times")
+    cursor.execute("DROP TABLE IF EXISTS jogos_finalizados")
+    cursor.execute("DROP TABLE IF EXISTS partidas")
+    cursor.execute("DROP TABLE IF EXISTS estatisticas_time")
+    
     cursor.execute('CREATE TABLE IF NOT EXISTS times (id INTEGER PRIMARY KEY, nome TEXT NOT NULL UNIQUE, url_escudo TEXT)')
     cursor.execute('''CREATE TABLE IF NOT EXISTS atletas (id INTEGER PRIMARY KEY, apelido TEXT NOT NULL, cartoes_amarelos INTEGER DEFAULT 0, cartoes_vermelhos INTEGER DEFAULT 0, rodada_ultimo_vermelho INTEGER DEFAULT 0, rodada_suspensao_amarelo INTEGER DEFAULT 0, time_id INTEGER, FOREIGN KEY (time_id) REFERENCES times (id))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS jogos_finalizados (id_jogo INTEGER PRIMARY KEY, rodada INTEGER NOT NULL)''')
@@ -55,8 +96,6 @@ def criar_banco_de_dados():
             media_cartoes_amarelos REAL, total_cartoes_vermelhos INTEGER, media_escanteios REAL,
             FOREIGN KEY (time_id) REFERENCES times (id)
         )''')
-    # DROP para garantir que a nova estrutura com colunas de imagem e posição seja criada
-    cursor.execute('DROP TABLE IF EXISTS escalacoes')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS escalacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,27 +114,11 @@ def criar_banco_de_dados():
     conn.close()
     print(f"Banco de dados verificado/criado em: {DB_FILE}")
 
-def limpar_tabelas():
-    # Esta função se torna redundante, pois criar_banco_de_dados já limpa a tabela principal,
-    # mas a mantemos para clareza do fluxo.
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    print("Recriando tabelas (DROP/CREATE)...")
-    cursor.execute("DROP TABLE IF EXISTS escalacoes")
-    cursor.execute("DROP TABLE IF EXISTS atletas")
-    cursor.execute("DROP TABLE IF EXISTS times")
-    cursor.execute("DROP TABLE IF EXISTS jogos_finalizados")
-    cursor.execute("DROP TABLE IF EXISTS partidas")
-    cursor.execute("DROP TABLE IF EXISTS estatisticas_time")
-    conn.commit()
-    conn.close()
-    print("Tabelas antigas removidas.")
-
 def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_info, todas_as_partidas_info, estatisticas_times, todas_as_escalacoes):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     print("\nSalvando novos dados no banco de dados...")
-
+    
     for time_id, dados_time in times_info.items():
         cursor.execute('INSERT OR REPLACE INTO times (id, nome, url_escudo) VALUES (?, ?, ?)', (time_id, dados_time['nome'], dados_time['url_escudo']))
     
@@ -126,11 +149,11 @@ def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_
                     cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                                    (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
                 for jogador in time_mandante.get('reservas', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao']))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao'], jogador.get('foto_url')))
                 for jogador in time_mandante.get('fora_de_jogo', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao) VALUES (?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})"))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})", jogador.get('foto_url')))
 
             if 'visitante' in escalacao_jogo:
                 time_visitante = escalacao_jogo['visitante']
@@ -138,11 +161,11 @@ def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_
                     cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                                    (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
                 for jogador in time_visitante.get('reservas', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao']))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao'], jogador.get('foto_url')))
                 for jogador in time_visitante.get('fora_de_jogo', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao) VALUES (?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})"))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})", jogador.get('foto_url')))
 
     if estatisticas_times:
         for time_id, stats in estatisticas_times.items():
@@ -206,8 +229,8 @@ def buscar_dados_campeonato_completo(id_competicao, num_rodadas):
 
 def buscar_classificacao_com_scraping(ano_competicao, times_info):
     print("\nBuscando dados de classificação via Web Scraping da CBF...")
-    url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
     estatisticas_times = {}
+    url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
     try:
         response = requests.get(url_tabela, headers=HEADERS, timeout=20)
         response.raise_for_status()
@@ -237,8 +260,6 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
         print(f"   > Erro ao fazer web scraping da tabela de classificação: {e}")
         return {}
 
-
-# --- FUNÇÕES DE COLETA DO 365SCORES (ISOLADAS) ---
 def handle_cookie_banner(driver):
     try:
         wait = WebDriverWait(driver, 5)
@@ -259,7 +280,22 @@ def handle_ad_popup(driver):
     except Exception:
         pass
 
-def extrair_dados_time(widget_content):
+def find_photo_url(nome_curto, fotos_dict):
+    nome_normalizado = unidecode(nome_curto).lower()
+    
+    if nome_normalizado in fotos_dict:
+        return fotos_dict[nome_normalizado]
+    
+    partes_nome = nome_normalizado.split()
+    if len(partes_nome) > 1:
+        sobrenome = partes_nome[-1]
+        for nome_completo, url in fotos_dict.items():
+            if nome_completo.endswith(sobrenome):
+                return url
+
+    return ''
+
+def extrair_dados_time(widget_content, fotos_jogadores):
     dados = {'titulares': [], 'reservas': [], 'fora_de_jogo': [], 'formacao': ''}
     try:
         dados['formacao'] = widget_content.find('bdi', class_=lambda c: c and 'lineups-widget_status_text' in c).text.strip()
@@ -280,6 +316,7 @@ def extrair_dados_time(widget_content):
 
         titulares_tags = canvas_container.find_all('a', class_=lambda c: c and 'field-formation_player_container' in c)
         for j_tag in titulares_tags:
+            nome_jogador = j_tag.find('div', class_=lambda c: c and 'field-formation_player_name' in c).text.strip()
             style = j_tag.get('style', '')
             left_match = re.search(r'left:\s*([\d.-]+)px', style)
             bottom_match = re.search(r'bottom:\s*([\d.-]+)px', style)
@@ -288,9 +325,9 @@ def extrair_dados_time(widget_content):
             pos_y_px = float(bottom_match.group(1)) if bottom_match else 0.0
 
             dados['titulares'].append({
-                'nome': j_tag.find('div', class_=lambda c: c and 'field-formation_player_name' in c).text.strip(),
+                'nome': nome_jogador,
                 'numero': j_tag.find('div', class_=lambda c: c and 'field-formation_player_number_text' in c).text.strip(),
-                'foto_url': j_tag.find('img').get('src', ''),
+                'foto_url': find_photo_url(nome_jogador, fotos_jogadores),
                 'pos_x': (pos_x_px / container_width) * 100,
                 'pos_y': (pos_y_px / container_height) * 100,
             })
@@ -304,25 +341,29 @@ def extrair_dados_time(widget_content):
         if 'Banco' in titulo_tag.text:
             reservas = lista.find_all('a', class_=lambda c: c and 'players-list-item' in c)
             for j in reservas:
+                nome_jogador = j.find('div', class_=lambda c: c and 'players-list-item-player-name' in c).text.strip()
                 num_div = j.find('div', class_=lambda c: c and 'players-list-item-player-number' in c)
                 pos_tag = j.find('div', class_=lambda c: c and 'players-list-item-player-position' in c)
                 dados['reservas'].append({
-                    'nome': j.find('div', class_=lambda c: c and 'players-list-item-player-name' in c).text.strip(),
+                    'nome': nome_jogador,
                     'numero': num_div.div.text.strip() if num_div and num_div.div else 'S/N',
-                    'posicao': pos_tag.text.strip() if pos_tag else 'N/A'
+                    'posicao': pos_tag.text.strip() if pos_tag else 'N/A',
+                    'foto_url': find_photo_url(nome_jogador, fotos_jogadores),
                 })
             print(f"     - {len(dados['reservas'])} reservas encontrados.")
         elif 'Fora do jogo' in titulo_tag.text:
             ausentes = lista.find_all('a', class_=lambda c: c and 'players-list-item' in c)
             for j in ausentes:
+                nome_jogador = j.find('div', class_=lambda c: c and 'players-list-item-player-name' in c).text.strip()
                 motivo = 'Indisponível'
                 if j.find('div', class_=lambda c: c and 'suspension' in c): motivo = 'Suspenso'
                 elif j.find('div', class_=lambda c: c and 'injuries' in c): motivo = 'Lesionado'
                 pos_tag = j.find('div', class_=lambda c: c and 'players-list-item-player-position' in c)
                 dados['fora_de_jogo'].append({
-                    'nome': j.find('div', class_=lambda c: c and 'players-list-item-player-name' in c).text.strip(),
+                    'nome': nome_jogador,
                     'posicao': pos_tag.text.strip() if pos_tag else 'N/A',
-                    'motivo': motivo
+                    'motivo': motivo,
+                    'foto_url': find_photo_url(nome_jogador, fotos_jogadores),
                 })
             print(f"     - {len(dados['fora_de_jogo'])} jogadores fora de jogo encontrados.")
     return dados
@@ -398,13 +439,43 @@ def buscar_stats_365scores():
             driver.quit()
             print("   > Navegador de estatísticas fechado.")
 
+def buscar_fotos_jogadores(driver):
+    print("\nBuscando fotos dos jogadores de todos os times...")
+    fotos = {}
+    wait = WebDriverWait(driver, 10)
+    for team_name, url in URLS_ELENCO_365.items():
+        try:
+            print(f"   > Buscando elenco do {team_name}...")
+            driver.get(url)
+            wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@class, 'squad-widget_row__')]")))
+            time.sleep(2)
+            
+            soup = BeautifulSoup(driver.page_source, 'lxml')
+            
+            jogadores_tags = soup.find_all('a', class_=lambda c: c and 'squad-widget_row__' in c)
+            count = 0
+            for jogador_tag in jogadores_tags:
+                nome_tag = jogador_tag.find('span', class_=lambda c: c and 'squad-widget_player_name__' in c)
+                img_tag = jogador_tag.find('img', class_=lambda c: c and 'squad-widget_athlete_logo__' in c)
+                
+                if nome_tag and img_tag and img_tag.has_attr('src'):
+                    nome = unidecode(nome_tag.text.strip().lower())
+                    foto_url = img_tag['src']
+                    if nome and foto_url:
+                        fotos[nome] = foto_url
+                        count += 1
+            print(f"     - {count} fotos de jogadores encontradas para {team_name}.")
+        except Exception as e:
+            print(f"     - ❌ Erro ao buscar elenco do {team_name}: {e}")
+            continue
+    print(f"\n✅ Total de {len(fotos)} fotos de jogadores coletadas.")
+    return fotos
 
-def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365):
+def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365, fotos_jogadores):
     print(f"\nBuscando escalações para a rodada {proxima_rodada} no 365Scores...")
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-    
     
     service = ChromeService(ChromeDriverManager().install())
     driver = None
@@ -414,6 +485,9 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 20)
         
+        if not fotos_jogadores:
+            fotos_jogadores = buscar_fotos_jogadores(driver)
+
         url_fixtures = "https://www.365scores.com/pt-br/football/league/brasileirao-serie-a-113/matches#fixtures"
         driver.get(url_fixtures)
         handle_cookie_banner(driver)
@@ -485,7 +559,7 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
                 soup_mandante = BeautifulSoup(driver.page_source, 'lxml')
                 widget_content_mandante = soup_mandante.find('div', class_=lambda c: c and 'game-center-widget_content' in c)
                 if widget_content_mandante:
-                    jogo_atual['mandante'] = {'nome': jogo_cbf['mandante_nome'], **extrair_dados_time(widget_content_mandante)}
+                    jogo_atual['mandante'] = {'nome': jogo_cbf['mandante_nome'], **extrair_dados_time(widget_content_mandante, fotos_jogadores)}
 
                 botoes_time = driver.find_elements(By.XPATH, "//div[contains(@class, 'secondary-tabs_tab_button_container')]")
                 if len(botoes_time) > 1:
@@ -496,7 +570,7 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
                     soup_visitante = BeautifulSoup(driver.page_source, 'lxml')
                     widget_content_visitante = soup_visitante.find('div', class_=lambda c: c and 'game-center-widget_content' in c)
                     if widget_content_visitante:
-                        jogo_atual['visitante'] = {'nome': jogo_cbf['visitante_nome'], **extrair_dados_time(widget_content_visitante)}
+                        jogo_atual['visitante'] = {'nome': jogo_cbf['visitante_nome'], **extrair_dados_time(widget_content_visitante, fotos_jogadores)}
                 
                 todas_as_escalacoes[jogo_cbf['id_jogo']] = jogo_atual
 
@@ -518,7 +592,6 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
 def main_run():
     print(f"\n{'='*20} INICIANDO CICLO DE COLETA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} {'='*20}")
     
-    limpar_tabelas()
     criar_banco_de_dados()
     
     dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas = buscar_dados_campeonato_completo(ID_COMPETICAO_CBF, TOTAL_RODADAS)
@@ -536,12 +609,13 @@ def main_run():
     rodada_atual = max([jogo['rodada'] for jogo in jogos_finalizados]) if jogos_finalizados else 0
     proxima_rodada = rodada_atual + 1
     
+    todas_as_escalacoes = {} 
     if proxima_rodada > TOTAL_RODADAS:
         print("Campeonato finalizado. Nenhuma nova escalação para buscar.")
     else:
         jogos_da_proxima_rodada_cbf = [jogo for jogo in todas_as_partidas if jogo['rodada'] == proxima_rodada]
         mapa_nomes_cbf_para_365 = {v: k for k, v in MAPA_NOMES_365_PARA_CBF.items()}
-        todas_as_escalacoes = buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365)
+        todas_as_escalacoes = buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, mapa_nomes_cbf_para_365, {})
         
         for jogo_id, escalacao_data in todas_as_escalacoes.items():
             for i, partida in enumerate(todas_as_partidas):
@@ -567,7 +641,7 @@ def main_run():
             else:
                 print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
 
-    salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times, todas_as_escalacoes if 'todas_as_escalacoes' in locals() else {})
+    salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times, todas_as_escalacoes)
     print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO.")
 
 if __name__ == "__main__":
