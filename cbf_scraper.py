@@ -42,7 +42,7 @@ MAPA_NOMES_365_PARA_CBF = {
     "RB Bragantino": "Red Bull Bragantino",
     "Santos": "Santos Fc",
     "São Paulo": "São Paulo",  
-    "Vasco da Gama": "Vasco da Gama S.a.f.",
+    "Vasco": "Vasco da Gama S.a.f.",
     "Sport Recife": "Sport",
     "Vitória": "Vitória", 
       
