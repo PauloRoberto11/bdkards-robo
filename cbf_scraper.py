@@ -25,6 +25,7 @@ TOTAL_RODADAS = 38
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 MAPA_NOMES_365_PARA_CBF = {
+    
     "Atlético-MG": "Atlético Mineiro Saf", 
     "Bahia": "Bahia",
     "Botafogo": "Botafogo", 
@@ -42,11 +43,37 @@ MAPA_NOMES_365_PARA_CBF = {
     "RB Bragantino": "Red Bull Bragantino",
     "Santos": "Santos Fc",
     "São Paulo": "São Paulo",  
+    "Sport": "Sport Recife",
     "Vasco": "Vasco da Gama S.a.f.",
-    "Sport Recife": "Sport",
     "Vitória": "Vitória", 
       
 }
+
+# --- MAPA DE NORMALIZAÇÃO CBF API (LONGO) -> CBF SITE (CURTO) ---
+# Usado para forçar a correspondência de nomes problemáticos (SAF, Sport, etc.)
+MAPA_NORMALIZACAO_NOME_CBF_SITE = {
+    "Atlético Mineiro Saf": "Atlético-MG",
+    "Bahia": "Bahia",
+    "Botafogo": "Botafogo", 
+    "Ceará": "Ceará",
+    "Corinthians": "Corinthians",
+    "Cruzeiro Saf": "Cruzeiro",
+    "Flamengo": "Flamengo",
+    "Fluminense": "Fluminense",
+    "Fortaleza Ec Saf": "Fortaleza",
+    "Grêmio": "Grêmio",
+    "Internacional": "Internacional",
+    "Juventude": "Juventude",
+    "Mirassol": "Mirassol",
+    "Palmeiras": "Palmeiras",
+    "Red Bull Bragantino": "RB Bragantino",
+    "Santos Fc": "Santos",
+    "São Paulo": "São Paulo",  
+    "Sport Recife": "Sport", 
+    "Vasco da Gama S.a.f.": "Vasco da Gama",
+    "Vitória": "Vitória", 
+}
+
 URLS_ELENCO_365 = {
      "Atlético-MG": "https://www.365scores.com/pt-br/football/team/atletico-mineiro-1209/squad",
      "Bahia": "https://www.365scores.com/pt-br/football/team/bahia-1767/squad",
@@ -69,6 +96,14 @@ URLS_ELENCO_365 = {
      "Vasco": "https://www.365scores.com/pt-br/football/team/vasco-da-gama-1227/squad",
      "Vitória": "https://www.365scores.com/pt-br/football/team/vitoria-1228/squad"
  }
+
+def obter_url_foto_segura(dados_jogador):
+    """
+    Retorna a URL da foto do jogador, ou None se a URL for uma string vazia.
+    Garante que o SQLite receba NULL em vez de ''.
+    """
+    url = dados_jogador.get('foto_url')
+    return url if url else None
 
 # --- FUNÇÕES DO BANCO DE DADOS ---
 def criar_banco_de_dados():
@@ -115,62 +150,99 @@ def criar_banco_de_dados():
     print(f"Banco de dados verificado/criado em: {DB_FILE}")
 
 def salvar_dados_no_banco(estatisticas_jogadores, times_info, jogos_finalizados_info, todas_as_partidas_info, estatisticas_times, todas_as_escalacoes):
+    """
+    Salva todos os dados coletados (times, jogadores, partidas, estatísticas e escalações)
+    no banco de dados SQLite, garantindo que URLs de fotos vazias sejam salvas como NULL.
+    """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     print("\nSalvando novos dados no banco de dados...")
     
+    # --- 1. TIMES ---
     for time_id, dados_time in times_info.items():
-        cursor.execute('INSERT OR REPLACE INTO times (id, nome, url_escudo) VALUES (?, ?, ?)', (time_id, dados_time['nome'], dados_time['url_escudo']))
+        cursor.execute('INSERT OR REPLACE INTO times (id, nome, url_escudo) VALUES (?, ?, ?)', 
+                       (time_id, dados_time['nome'], dados_time['url_escudo']))
     
+    # --- 2. ATLETAS (Geral) ---
     for atleta_id, dados_atleta in estatisticas_jogadores.items():
+        # Garantindo que 'rodada_suspensao_amarelo' seja 0 se não estiver presente
+        rodada_suspensao = dados_atleta.get('rodada_suspensao_amarelo', 0)
+        
         cursor.execute('INSERT OR REPLACE INTO atletas (id, apelido, cartoes_amarelos, cartoes_vermelhos, rodada_ultimo_vermelho, rodada_suspensao_amarelo, time_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                       (atleta_id, dados_atleta['nome'], dados_atleta['amarelos'], dados_atleta['vermelhos'], dados_atleta['rodada_ultimo_vermelho'], dados_atleta.get('rodada_suspensao_amarelo', 0), dados_atleta['time_id']))
+                       (atleta_id, dados_atleta['nome'], dados_atleta['amarelos'], dados_atleta['vermelhos'], dados_atleta['rodada_ultimo_vermelho'], rodada_suspensao, dados_atleta['time_id']))
     
+    # --- 3. JOGOS FINALIZADOS ---
     for jogo in jogos_finalizados_info:
-        cursor.execute('INSERT OR REPLACE INTO jogos_finalizados (id_jogo, rodada) VALUES (?, ?)', (jogo['id_jogo'], jogo['rodada']))
+        cursor.execute('INSERT OR REPLACE INTO jogos_finalizados (id_jogo, rodada) VALUES (?, ?)', 
+                       (jogo['id_jogo'], jogo['rodada']))
 
+    # --- 4. PARTIDAS (CABEÇALHO) ---
     for jogo in todas_as_partidas_info:
+        # Usando .get() para campos que podem ter sido preenchidos pelas escalações
         cursor.execute('''INSERT OR REPLACE INTO partidas (
             id_jogo, rodada, data, hora, local, mandante_nome, mandante_url_escudo, mandante_gols, mandante_formacao, 
             visitante_nome, visitante_url_escudo, visitante_gols, visitante_formacao
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (jogo['id_jogo'], jogo['rodada'], jogo['data'], jogo['hora'], jogo['local'],
-            jogo['mandante_nome'], jogo['mandante_url_escudo'], jogo['mandante_gols'], jogo.get('mandante_formacao'),
-            jogo['visitante_nome'], jogo['visitante_url_escudo'], jogo['visitante_gols'], jogo.get('visitante_formacao')))
+             jogo['mandante_nome'], jogo['mandante_url_escudo'], jogo['mandante_gols'], jogo.get('mandante_formacao'),
+             jogo['visitante_nome'], jogo['visitante_url_escudo'], jogo['visitante_gols'], jogo.get('visitante_formacao')))
 
+    # --- 5. ESCALAÇÕES (DETALHE) ---
     if todas_as_escalacoes:
         print("Salvando escalações...")
+        # AQUI VAMOS INSERIR NOVAS ESCALAÇÕES (É bom apagar as antigas da rodada antes, se o script for rodar múltiplas vezes, mas o seu já faz isso na criar_banco_de_dados)
+        
         for jogo_id, escalacao_jogo in todas_as_escalacoes.items():
             if not escalacao_jogo: continue
 
             if 'mandante' in escalacao_jogo:
                 time_mandante = escalacao_jogo['mandante']
+                
+                # Titulares
                 for jogador in time_mandante.get('titulares', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
+                    # numero_camisa e posicao estão omitidas no INSERT. Corrigindo para ser consistente.
+                    # Vamos inserir NULL para `posicao` já que não é extraída aqui, apenas `pos_x` e `pos_y`.
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], None, 1, obter_url_foto_segura(jogador), jogador.get('pos_x'), jogador.get('pos_y')))
+                
+                # Reservas
                 for jogador in time_mandante.get('reservas', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao'], jogador.get('foto_url')))
+                    # pos_x e pos_y estão omitidas no INSERT. Corrigindo para ser consistente.
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], jogador['numero'], jogador['posicao'], 0, obter_url_foto_segura(jogador), None, None))
+                
+                # Fora de Jogo
                 for jogador in time_mandante.get('fora_de_jogo', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_mandante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})", jogador.get('foto_url')))
+                    # numero_camisa, pos_x e pos_y estão omitidas no INSERT. Corrigindo para ser consistente.
+                    # Inserindo NULL para numero_camisa, pos_x e pos_y.
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_mandante['nome'], jogador['nome'], None, f"Ausente ({jogador['motivo']})", 0, obter_url_foto_segura(jogador), None, None))
 
             if 'visitante' in escalacao_jogo:
                 time_visitante = escalacao_jogo['visitante']
+                
+                # Titulares
                 for jogador in time_visitante.get('titulares', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 1, jogador.get('foto_url'), jogador.get('pos_x'), jogador.get('pos_y')))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], None, 1, obter_url_foto_segura(jogador), jogador.get('pos_x'), jogador.get('pos_y')))
+                
+                # Reservas
                 for jogador in time_visitante.get('reservas', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], 0, jogador['posicao'], jogador.get('foto_url')))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], jogador['numero'], jogador['posicao'], 0, obter_url_foto_segura(jogador), None, None))
+                
+                # Fora de Jogo
                 for jogador in time_visitante.get('fora_de_jogo', []):
-                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, is_titular, posicao, foto_url) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (jogo_id, time_visitante['nome'], jogador['nome'], 0, f"Ausente ({jogador['motivo']})", jogador.get('foto_url')))
+                    cursor.execute('INSERT INTO escalacoes (jogo_id, time_nome, nome_jogador, numero_camisa, posicao, is_titular, foto_url, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (jogo_id, time_visitante['nome'], jogador['nome'], None, f"Ausente ({jogador['motivo']})", 0, obter_url_foto_segura(jogador), None, None))
 
+
+    # --- 6. ESTATÍSTICAS DE TIME ---
     if estatisticas_times:
         for time_id, stats in estatisticas_times.items():
             cursor.execute('''INSERT OR REPLACE INTO estatisticas_time (time_id, posicao, pontos, ultimos_jogos, media_cartoes_amarelos, total_cartoes_vermelhos, media_escanteios) VALUES (?, ?, ?, ?, ?, ?, ?)''',
                            (time_id, stats.get('posicao'), stats.get('pontos'), stats.get('ultimos_jogos'), stats.get('media_amarelos', 0), stats.get('total_vermelhos', 0), stats.get('media_escanteios', 0)))
+    
     conn.commit()
     conn.close()
     print("✅ Dados salvos/atualizados com sucesso.")
@@ -228,36 +300,108 @@ def buscar_dados_campeonato_completo(id_competicao, num_rodadas):
     return estatisticas_jogadores, times_info, jogos_finalizados_info, todas_as_partidas_info
 
 def buscar_classificacao_com_scraping(ano_competicao, times_info):
+    """
+    Realiza web scraping da tabela de classificação da CBF, mapeando os nomes
+    encontrados para os IDs da API.
+    """
     print("\nBuscando dados de classificação via Web Scraping da CBF...")
     estatisticas_times = {}
     url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
+
+    # --------------------------------------------------------------------------
+    # 1. CRIAÇÃO DO MAPA DE BUSCA (API ID -> CHAVE NORMALIZADA)
+    # --------------------------------------------------------------------------
+    mapa_api_normalizado = {}
+    for time_id, info in times_info.items():
+        nome_cbf_api = info['nome']
+        
+        # 1. Traduz o nome longo da API para o nome curto (ex: 'Atlético Mineiro Saf' -> 'Atlético-MG')
+        nome_curto_site = MAPA_NORMALIZACAO_NOME_CBF_SITE.get(nome_cbf_api, nome_cbf_api)
+        
+        # 2. Normalização Final Simétrica (Remove acentos, minúsculas, limpa)
+        chave_de_busca = unidecode(nome_curto_site).lower().strip()
+        chave_de_busca = chave_de_busca.replace(' saf', '').replace('s.a.f.', '').replace(' ec', '').replace(' fc', '').strip()
+        chave_de_busca = re.sub(r'[.,-]', '', chave_de_busca) # Remove pontos, vírgulas, hífens
+        chave_de_busca = chave_de_busca.replace(' ', '') # Remove todos os espaços (chave mais limpa)
+
+        mapa_api_normalizado[chave_de_busca] = time_id
+    # --------------------------------------------------------------------------
+
     try:
         response = requests.get(url_tabela, headers=HEADERS, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'lxml')
         container_tabela = soup.find('div', class_='styles_tableContent__dh0gO')
-        if not container_tabela: return {}
+        
+        if not container_tabela:
+            print("   > ERRO: Container da tabela de classificação não encontrado.")
+            return {}
+        
         tabela = container_tabela.find('table')
-        if not tabela: return {}
+        if not tabela:
+            print("   > ERRO: Tabela (tag <table>) não encontrada dentro do container.")
+            return {}
+            
         linhas = tabela.find('tbody').find_all('tr')
-        mapa_api_normalizado = {info['nome'].lower().replace(' saf', '').replace('s.a.f.', '').replace(' ec', '').replace(' cr', '').strip(): time_id for time_id, info in times_info.items()}
+        
         for linha in linhas:
             celulas = linha.find_all('td')
             if len(celulas) < 13: continue
-            posicao_tag = celulas[0].find('strong'); nome_time_tag = celulas[0].find('strong', class_=lambda c: c is None or 'styles' not in c)
-            pontos_tag = celulas[1]; jogos_tag = celulas[2]; ultimos_jogos_container = celulas[12].find('div')
-            if not all([posicao_tag, nome_time_tag, pontos_tag, jogos_tag, ultimos_jogos_container]): continue
-            posicao = posicao_tag.text.strip(); nome_time_completo = nome_time_tag.text.strip(); pontos = pontos_tag.text.strip(); jogos_disputados = int(jogos_tag.text.strip())
-            ultimos_jogos_svgs = ultimos_jogos_container.find_all('svg')
-            ultimos_jogos_str = "".join(['V' if svg.find('circle')['fill'] == '#24C796' else 'E' if svg.find('circle')['fill'] == '#B7B7B7' else 'D' for svg in ultimos_jogos_svgs if svg.find('circle')])
-            nome_site_normalizado = nome_time_completo.lower().replace(' saf', '').replace('s.a.f.', '').replace(' ec', '').replace(' cr', '').strip()
+                
+            posicao_tag = celulas[0].find('strong')
+            nome_time_tag = celulas[0].find('strong', class_=lambda c: c is None or 'styles' not in c)
+            pontos_tag = celulas[1]
+            jogos_tag = celulas[2]
+            ultimos_jogos_container = celulas[12].find('div')
+            
+            if not all([posicao_tag, nome_time_tag, pontos_tag, jogos_tag, ultimos_jogos_container]):
+                continue
+            
+            posicao = posicao_tag.text.strip()
+            nome_time_completo = nome_time_tag.text.strip()
+            pontos = pontos_tag.text.strip()
+            jogos_disputados = int(jogos_tag.text.strip())
+            
+            # ----------------------------------------------------
+            # 2. NORMALIZAÇÃO DO NOME LIDO NO SITE PARA BUSCA
+            # ----------------------------------------------------
+            nome_site_normalizado = unidecode(nome_time_completo).lower().strip()
+            nome_site_normalizado = nome_site_normalizado.replace(' saf', '').replace('s.a.f.', '').replace(' ec', '').replace(' fc', '').strip()
+            nome_site_normalizado = re.sub(r'[.,-]', '', nome_site_normalizado)
+            nome_site_normalizado = nome_site_normalizado.replace(' ', '') # Remove todos os espaços
+            
+            # Tratamento Específico para nomes longos que precisam de redução (ex: Red Bull -> RB)
+            if 'redbullbragantino' in nome_site_normalizado:
+                nome_site_normalizado = nome_site_normalizado.replace('redbull', 'rb') 
+            if 'atleticomineiro' in nome_site_normalizado:
+                # Se o nome lido do site for longo, forçamos a chave mais curta ('atleticomg')
+                nome_site_normalizado = 'atleticomg' 
+            # ----------------------------------------------------
+            
             time_id = mapa_api_normalizado.get(nome_site_normalizado)
+            
             if time_id:
-                estatisticas_times[time_id] = {'posicao': int(posicao), 'pontos': int(pontos), 'ultimos_jogos': ultimos_jogos_str, 'jogos_disputados': jogos_disputados}
+                # Extração dos Últimos Jogos (lógica de SVG mantida)
+                ultimos_jogos_svgs = ultimos_jogos_container.find_all('svg')
+                ultimos_jogos_str = "".join([
+                    'V' if svg.find('circle')['fill'] == '#24C796' else 
+                    'E' if svg.find('circle')['fill'] == '#B7B7B7' else 
+                    'D' for svg in ultimos_jogos_svgs if svg.find('circle')
+                ])
+                
+                estatisticas_times[time_id] = {
+                    'posicao': int(posicao), 
+                    'pontos': int(pontos), 
+                    'ultimos_jogos': ultimos_jogos_str, 
+                    'jogos_disputados': jogos_disputados
+                }
+            # else: O time não será adicionado se o ID não for encontrado (filtrando os 20 corretos)
+        
         print(f"✅ Dados de classificação para {len(estatisticas_times)} times processados com sucesso.")
         return estatisticas_times
+        
     except Exception as e:
-        print(f"   > Erro ao fazer web scraping da tabela de classificação: {e}")
+        print(f"   > Erro ao fazer web scraping da tabela de classificação: {e}")
         return {}
 
 def handle_cookie_banner(driver):
@@ -280,19 +424,47 @@ def handle_ad_popup(driver):
     except Exception:
         pass
 
+from unidecode import unidecode
+import re # Se precisar de regex (não é estritamente necessário aqui, mas bom ter)
+
 def find_photo_url(nome_curto, fotos_dict):
-    nome_normalizado = unidecode(nome_curto).lower()
+    """
+    Busca a URL da foto, priorizando a correspondência exata ou a presença do apelido
+    dentro do nome completo coletado.
+    """
+    # Ex: 'I. VINICIUS' -> 'i vinicius' ou 'ESCORBAR' -> 'escobar'
+    nome_normalizado = unidecode(nome_curto).lower().replace('.', ' ')
     
+    # 1. Tenta a busca por nome exato/apelido (normalizado)
     if nome_normalizado in fotos_dict:
         return fotos_dict[nome_normalizado]
     
+    # 2. Tenta a busca flexível: verifica se o nome curto está contido no nome completo
+    #    (Isso resolve a maioria dos apelidos, como 'Frías' em 'Jesus Frías')
+    #    Também tenta checar se o último nome corresponde (sobrenome)
+    
+    # Prepara variações do nome curto
     partes_nome = nome_normalizado.split()
-    if len(partes_nome) > 1:
-        sobrenome = partes_nome[-1]
-        for nome_completo, url in fotos_dict.items():
-            if nome_completo.endswith(sobrenome):
-                return url
+    apelido = partes_nome[0] if partes_nome else nome_normalizado # Pega o primeiro nome (apelido)
+    sobrenome = partes_nome[-1] if len(partes_nome) > 1 else None # Pega o último nome (sobrenome)
+    
+    for nome_completo, url in fotos_dict.items():
+        # Tentativa A: O nome curto inteiro está no nome completo?
+        if nome_normalizado in nome_completo:
+            return url
+        
+        # Tentativa B: O apelido está no nome completo? (Útil para 'Brazão' vs 'Anderson Brazão')
+        if apelido and apelido in nome_completo:
+            # Esta é uma correspondência forte, mas pode ter falsos positivos (Ex: 'Silva' e 'Santos')
+            # Você pode adicionar mais verificações aqui se tiver muitos erros, como 'apelido é único na lista'
+            return url
 
+        # Tentativa C: Sobrenome correspondente
+        if sobrenome and nome_completo.endswith(sobrenome):
+            # Se o último nome for igual (Ex: 'Frías' vs 'Jesus Frías')
+            return url
+
+    # 3. Falha
     return ''
 
 def extrair_dados_time(widget_content, fotos_jogadores):
@@ -600,7 +772,34 @@ def main_run():
 
     estatisticas_dos_times = buscar_classificacao_com_scraping(ANO_COMPETICAO, dados_times_cbf)
     
-    if len(estatisticas_dos_times) < 20: sys.exit(f"❌ ERRO: Scraping da CBF retornou apenas {len(estatisticas_dos_times)} times.")
+    # --- INÍCIO DO BLOCO DE DIAGNÓSTICO AVANÇADO ---
+
+    # 1. Cria a lista de todos os times que DEVEM estar lá (os 20 da API)
+    times_cbf_api = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
+
+    # 2. Cria a lista dos times que FORAM COLETADOS (os 18 do scraping)
+    time_ids_coletados = set(estatisticas_dos_times.keys())
+
+    # 3. Encontra os IDs que estavam na API mas NÃO no resultado do scraping
+    time_ids_perdidos = set(times_cbf_api.values()) - time_ids_coletados
+
+    if time_ids_perdidos:
+        print("\n--- DIAGNÓSTICO DE TIMES PERDIDOS NO SCRAPING CBF ---")
+        nomes_perdidos = [nome for nome, time_id in times_cbf_api.items() if time_id in time_ids_perdidos]
+        
+        print(f"❌ ERRO GRAVE: {len(nomes_perdidos)} times não foram encontrados no scraping da CBF.")
+        print("LISTA DE NOMES PERDIDOS (API CBF):")
+        for nome in nomes_perdidos:
+            # Tenta mostrar qual seria a chave de busca (normalizada)
+            nome_cbf_site = MAPA_NORMALIZACAO_NOME_CBF_SITE.get(nome, nome)
+            chave_de_busca_scraper = unidecode(nome_cbf_site).lower().strip().replace(' saf', '').replace(' ec', '').replace(' fc', '').strip().replace('s.a.f.', '')
+            
+            print(f"   > {nome} (Chave de Busca Esperada: '{chave_de_busca_scraper}')")
+        print("-----------------------------------------------------")
+        
+    # --- FIM DO BLOCO DE DIAGNÓSTICO AVANÇADO ---
+        
+        if len(estatisticas_dos_times) < 20: sys.exit(f"❌ ERRO: Scraping da CBF retornou apenas {len(estatisticas_dos_times)} times.")
     
     stats_365 = buscar_stats_365scores()
     if stats_365 and len(stats_365) < 20: 
