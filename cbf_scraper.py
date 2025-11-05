@@ -44,6 +44,7 @@ MAPA_NOMES_365_PARA_CBF = {
     "Santos": "Santos Fc",
     "São Paulo": "São Paulo",  
     "Sport": "Sport Recife",
+    "Sport Recife": "Sport Recife", # NOVO: Chave exata que o scraping está encontrando
     "Vasco": "Vasco da Gama S.a.f.",
     "Vitória": "Vitória", 
       
@@ -69,8 +70,31 @@ MAPA_NORMALIZACAO_NOME_CBF_SITE = {
     "Red Bull Bragantino": "RB Bragantino",
     "Santos Fc": "Santos",
     "São Paulo": "São Paulo",  
-    "Sport Recife": "Sport", 
+    "Sport Recife": "Sport Recife", 
     "Vasco da Gama S.a.f.": "Vasco da Gama",
+    "Vitória": "Vitória", 
+}
+
+MAPA_ABREVIACOES = {
+    "Atlético-MG":"Atlético-MG",
+    "Bahia": "Bahia",
+    "Botafogo": "Botafogo", 
+    "Ceará": "Ceará",
+    "Corinthians": "Corinthians",
+    "Cruzeiro Saf": "Cruzeiro",
+    "Flamengo": "Flamengo",
+    "Fluminense": "Fluminense",
+    "Fortaleza": "Fortaleza",
+    "Grêmio": "Grêmio",
+    "Internacional": "Inter-RS",
+    "Juventude": "Juventude",
+    "Mirassol": "Mirassol",
+    "Palmeiras": "Palmeiras",
+    "RB Bragantino": "Bragantino",
+    "Santos Fc": "Santos",
+    "São Paulo": "São Paulo",  
+    "Sport": "Sport-PE", 
+    "Vasco da Gama": "Vasco",
     "Vitória": "Vitória", 
 }
 
@@ -264,9 +288,9 @@ def buscar_dados_campeonato_completo(id_competicao, num_rodadas):
             for grupo_de_jogos in dados_api.get('jogos', []):
                 for jogo in grupo_de_jogos.get('jogo', []):
                     jogo_id = jogo.get('id_jogo')
-                    if not jogo_id: continue
+                    if not jogo_id: continue    
                     mandante = jogo.get('mandante', {}); visitante = jogo.get('visitante', {})
-                    todas_as_partidas_info.append({'id_jogo': jogo_id, 'rodada': i, 'data': jogo.get('data'), 'hora': jogo.get('hora'), 'local': jogo.get('local'), 'mandante_nome': mandante.get('nome'), 'mandante_url_escudo': mandante.get('url_escudo'), 'mandante_gols': mandante.get('gols'), 'visitante_nome': visitante.get('nome'), 'visitante_url_escudo': visitante.get('url_escudo'), 'visitante_gols': visitante.get('gols')})
+                    todas_as_partidas_info.append({'id_jogo': jogo_id, 'rodada': i, 'data': jogo.get('data'), 'hora': jogo.get('hora'), 'local': jogo.get('local'), 'mandante_id': mandante.get('id'), 'mandante_nome': mandante.get('nome'), 'mandante_url_escudo': mandante.get('url_escudo'), 'mandante_gols': mandante.get('gols'), 'visitante_id': visitante.get('id'), 'visitante_nome': visitante.get('nome'), 'visitante_url_escudo': visitante.get('url_escudo'), 'visitante_gols': visitante.get('gols')})
                     documentos = jogo.get('documentos')
                     if documentos and isinstance(documentos, list) and len(documentos) > 0:
                         jogos_finalizados_info.append({'id_jogo': jogo_id, 'rodada': i})
@@ -307,7 +331,7 @@ def buscar_classificacao_com_scraping(ano_competicao, times_info):
     print("\nBuscando dados de classificação via Web Scraping da CBF...")
     estatisticas_times = {}
     url_tabela = f"https://www.cbf.com.br/futebol-brasileiro/tabelas/campeonato-brasileiro/serie-a/{ano_competicao}"
-
+                
     # --------------------------------------------------------------------------
     # 1. CRIAÇÃO DO MAPA DE BUSCA (API ID -> CHAVE NORMALIZADA)
     # --------------------------------------------------------------------------
@@ -760,7 +784,115 @@ def buscar_escalacoes_da_rodada(proxima_rodada, jogos_da_proxima_rodada_cbf, map
         if driver:
             driver.quit()
             print("   > Navegador de escalações fechado.")
+def buscar_identidade_times_365scores(mapa_nomes_365_para_cbf):
+    """
+    Realiza web scraping no 365Scores (tabela de classificação) para obter
+    os nomes dos times conforme o site e suas URLs de escudo.
+    """
+    print("\nBuscando nomes e URLs de escudos dos times no 365Scores...")
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    
+    
+    service = ChromeService(ChromeDriverManager().install())
+    driver = None
+    identidades = {} # {nome_cbf: {'nome_365': '...', 'escudo_url': '...'}}
+    
+    # URL CORRIGIDA para a tabela de classificação (standings)
+    URL_STANDINGS = "https://www.365scores.com/pt-br/football/league/brasileirao-serie-a-113/standings"
 
+    try:
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(URL_STANDINGS)
+        handle_cookie_banner(driver)
+        
+        # 1. Aguardar o contêiner principal da tabela (mais robusto)
+        XPATH_TABELA = "//div[contains(@class, 'standings-widget_container')]"
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, XPATH_TABELA)))
+        
+        # O elemento já deve estar visível e pronto para ser raspado
+        time.sleep(2) 
+        
+        soup = BeautifulSoup(driver.page_source, 'lxml')
+        
+        # 2. Encontrar a tabela de classificação usando a classe principal
+        tabela_tag = soup.find('div', class_=lambda c: c and 'standings-widget_container' in c)
+        
+        if not tabela_tag:
+            print("   > AVISO: Tabela de classificação não encontrada no 365Scores.")
+            return {}
+            
+        # 3. Seletor para as linhas dos times, usando a classe que você identificou
+        linhas = tabela_tag.find_all('tr', class_=lambda c: c and 'standings-widget_table_row' in c)
+
+        for linha in linhas:
+            # Seletores corrigidos e mais robustos:
+            
+            # NOME DO TIME: Procura a tag <div> que contenha a classe 'competitor_name_text'
+            nome_tag = linha.find('div', class_=lambda c: c and 'competitor_name_text' in c)
+            
+            # ESCUDO: Procura a tag <img> que contenha a classe 'competitor_logo'
+            img_tag = linha.find('img', class_=lambda c: c and 'competitor_logo' in c)
+            
+            if nome_tag and img_tag and img_tag.has_attr('src'):
+                nome_time_365 = nome_tag.text.strip()
+                escudo_url = img_tag['src']
+            
+            # 1. Definir nome abreviado/customizado.
+            # O nome 'Sport Recife' será lido e abreviado corretamente pelo MAPA_ABREVIACOES (que deve ser ajustado, veja abaixo)
+            nome_abreviado = MAPA_ABREVIACOES.get(nome_time_365, nome_time_365)
+            
+            # 2. Mapear para o Nome CBF Longo (a chave no dados_times_cbf)
+            nome_time_cbf = mapa_nomes_365_para_cbf.get(nome_time_365)
+            
+            # 3. Tratar exceções e casos de inconsistência de nome
+            if not nome_time_cbf:
+                
+                # Tratamento manual para nomes que exigem correção no mapeamento
+                # Sport Recife não deveria mais entrar aqui se o mapa for corrigido, 
+                # mas mantemos a lógica para outros.
+                if nome_time_365 == "America-MG":
+                    nome_time_cbf = "América SAF"
+                elif nome_time_365 == "RB Bragantino":
+                    nome_time_cbf = "Red Bull Bragantino"
+                # Adicione outros casos que exigem correção manual aqui
+                
+                # Se após todas as tentativas de correção manual, o nome CBF ainda for None
+                if not nome_time_cbf:
+                    print(f"   > AVISO: Time '{nome_time_365}' (365Scores) não pode ser mapeado. Pulando.")
+                    continue # Pula este time, pois não sabemos qual ID CBF ele representa.
+            
+            # 4. SALVAR no dicionário 'identidades' (o Sport Recife virá para cá agora)
+            
+            # Agora verificamos se o nome_time_cbf encontrado é um valor válido
+            if nome_time_cbf in mapa_nomes_365_para_cbf.values():
+                identidades[nome_time_cbf] = {
+                    'nome_365_abreviado': nome_abreviado,
+                    'escudo_url': escudo_url
+                }
+            else:
+                # Este bloco só será atingido se o nome_time_cbf for, de fato, um valor inválido.
+                print(f"   > AVISO: Mapeamento de '{nome_time_365}' falhou na validação. Pulando.")
+                            
+                print(f"   > AVISO: Time '{nome_time_365}' (365Scores) não encontrado no MAPA_NOMES_365_PARA_CBF.")
+                            
+                print(f"✅ Identidade (Nome/Escudo) de {len(identidades)} times coletadas com sucesso.")
+                return identidades
+        
+        print(f"✅ Identidade (Nome/Escudo) de {len(identidades)} times coletadas com sucesso.")
+        
+        # O RETURN PRECISA ESTAR AQUI NO FINAL DO TRY
+        return identidades
+        
+    except Exception as e:
+        print(f"   > ❌ Erro ao buscar nomes e escudos: {type(e).__name__}: {e}")
+        return {}
+    finally:
+        if driver:
+            driver.quit()
+            print("   > Navegador de identidade de times fechado.")
+            
 def main_run():
     print(f"\n{'='*20} INICIANDO CICLO DE COLETA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} {'='*20}")
     
@@ -804,6 +936,73 @@ def main_run():
     stats_365 = buscar_stats_365scores()
     if stats_365 and len(stats_365) < 20: 
         print(f"⚠️ AVISO: Scraping de estatísticas retornou apenas {len(stats_365)} times. Continuando mesmo assim.")
+        
+    # --- NOVO BLOCO: ATUALIZAR NOMES E ESCUDOS COM 365SCORES ---
+    print("\n--- ATUALIZAÇÃO DE NOMES E ESCUDOS DOS TIMES ---")
+    
+    # O MAPA_NOMES_365_PARA_CBF já é {Nome_365: Nome_CBF_Longo}
+    identidades_365 = buscar_identidade_times_365scores(MAPA_NOMES_365_PARA_CBF)
+    
+    # VERIFICAÇÃO DE SEGURANÇA CRÍTICA:
+    if not identidades_365:
+        print("⚠️ AVISO: Falha ao coletar dados de identidade do 365Scores. Pulando a atualização de nomes/escudos.")
+    else:
+        # A lógica de iteração só entra se identidades_365 não for None ou vazio {}
+        
+        # Inverter dados_times_cbf para buscar pelo Nome CBF Longo e obter o ID (Chave do dict)
+        nome_cbf_para_id = {info['nome']: time_id for time_id, info in dados_times_cbf.items()}
+    
+    for nome_cbf_longo, identidade in identidades_365.items():
+        time_id = nome_cbf_para_id.get(nome_cbf_longo)
+        
+        if time_id and time_id in dados_times_cbf:
+            # 1. Troca o nome no dicionário central
+            nome_a_salvar = identidade['nome_365_abreviado']
+            
+            dados_times_cbf[time_id]['nome_curto'] = nome_a_salvar # Novo campo
+            dados_times_cbf[time_id]['nome'] = nome_a_salvar # Sobrescreve o nome longo da CBF
+            
+            # 2. Adiciona/Troca a URL do escudo
+            dados_times_cbf[time_id]['url_escudo'] = identidade['escudo_url']
+            
+            print(f"   > {nome_cbf_longo} ({time_id}): Nome atualizado para '{nome_a_salvar}', Escudo adicionado.")
+        else:
+            print(f"   > AVISO: Time '{nome_cbf_longo}' (365S) não encontrado no dicionário da CBF. Pulando.")
+
+    print("--- FIM DA ATUALIZAÇÃO ---")
+    
+    # ------------------------------------------------------------------
+    # NOVO BLOCO: MESCLAGEM DE NOME/ESCUDO NAS PARTIDAS (Para o Flutter)
+    # ------------------------------------------------------------------
+    print("\n--- INICIANDO MESCLAGEM de Nome/Escudo Abreviado nas Partidas ---")
+
+    times_atualizados_count = 0
+    for i, partida in enumerate(todas_as_partidas):
+        # ATENÇÃO: É VITAL QUE ESTAS CHAVES EXISTAM NO DICIONÁRIO 'partida'
+        mandante_id = partida.get('mandante_id') 
+        visitante_id = partida.get('visitante_id')
+
+        # 1. ATUALIZA MANDANTE
+        if mandante_id and mandante_id in dados_times_cbf:
+            dados_mandante = dados_times_cbf[mandante_id]
+            
+            # Sobrescreve os campos da PARTIDA com os dados atualizados do TIME
+            # (Nome abreviado e Novo Escudo)
+            todas_as_partidas[i]['mandante_nome'] = dados_mandante['nome']
+            todas_as_partidas[i]['mandante_url_escudo'] = dados_mandante['url_escudo']
+            times_atualizados_count += 1
+
+        # 2. ATUALIZA VISITANTE
+        if visitante_id and visitante_id in dados_times_cbf:
+            dados_visitante = dados_times_cbf[visitante_id]
+            
+            # Sobrescreve os campos da PARTIDA
+            todas_as_partidas[i]['visitante_nome'] = dados_visitante['nome']
+            todas_as_partidas[i]['visitante_url_escudo'] = dados_visitante['url_escudo']
+            times_atualizados_count += 1
+                
+    print(f"✅ Mesclagem concluída. {times_atualizados_count} referências de times em partidas atualizadas.")
+    # ------------------------------------------------------------------
 
     rodada_atual = max([jogo['rodada'] for jogo in jogos_finalizados]) if jogos_finalizados else 0
     proxima_rodada = rodada_atual + 1
@@ -837,8 +1036,7 @@ def main_run():
                 estatisticas_dos_times[time_id]['media_amarelos'] = round(float(total_amarelos) / jogos_disputados, 2) if jogos_disputados > 0 else 0
                 estatisticas_dos_times[time_id]['total_vermelhos'] = stats.get('total_vermelhos', 0)
                 estatisticas_dos_times[time_id]['media_escanteios'] = stats.get('media_escanteios', 0)
-            else:
-                print(f"   > AVISO DE MAPEAMENTO: Não foi possível encontrar o time '{nome_365}' (traduzido para '{nome_cbf}') no dicionário da CBF.")
+                            
 
     salvar_dados_no_banco(dados_jogadores, dados_times_cbf, jogos_finalizados, todas_as_partidas, estatisticas_dos_times, todas_as_escalacoes)
     print(f"\n✅ CICLO CONCLUÍDO COM SUCESSO.")
