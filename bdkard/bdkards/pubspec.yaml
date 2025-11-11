@@ -1,0 +1,53 @@
+name: bdkards
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.1 <4.0.0' # Verifique se esta versão corresponde à sua
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_svg: ^2.0.10+1
+
+  collection: ^1.18.0
+  cupertino_icons: ^1.0.8
+
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
+  
+  path: ^1.8.3
+  intl: ^0.19.0
+  http: ^1.2.1
+  path_provider: ^2.1.3
+
+  window_manager: ^0.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0 # A versão pode variar, mantenha a que o 'flutter create' gerou
+  
+  flutter_launcher_icons: ^0.13.1
+
+# A seção a seguir é específica do Flutter.
+flutter:
+  uses-material-design: true
+
+  # Para adicionar assets ao seu aplicativo, adicione uma seção de assets.
+  assets:
+    - assets/images/ # <-- Inclui todas as imagens da pasta
+    - assets/icon/   # <-- Inclui todos os ícones da pasta
+
+# ===================================================================
+# ===== CORREÇÃO APLICADA AQUI: Bloco alinhado à esquerda =====
+# ===================================================================
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/logo.png" # Verifique se o nome do seu ícone é 'logo.png'
+# ===================================================================
